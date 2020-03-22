@@ -108,6 +108,146 @@ Proof.
     exists (f x b). rewrite assoc. rewrite H. apply id_l.
 Qed.
 
+Definition isomorphism {A B} (G : Group A) (H : Group B) (map : A -> B) : Prop :=
+  bijective map /\ forall a1 a2, map (f a1 a2) = f (map a1) (map a2).
+
+(* Z has two self isomorphisms. *)
+Lemma Z_self_isomorphism_1 : isomorphism GroupInt GroupInt (fun a => a).
+Proof.
+  unfold isomorphism. unfold bijective. intuition.
+  - unfold injective. simplify. trivial.
+  - unfold surjective. simplify. exists b. trivial.
+Qed.
+
+Lemma Z_self_isomorphism_2 : isomorphism GroupInt GroupInt (fun a => Z.opp a).
+Proof.
+  unfold isomorphism. unfold bijective. intuition.
+  - unfold injective. simplify. intuition.
+  - unfold surjective. simplify. exists (Z.opp b).
+    do 2 (unfold Z.opp). cases b; trivial.
+  - simplify. rewrite Z.opp_add_distr. trivial.
+Qed.
+
+Definition isomorphic {A B} (G : Group A) (H : Group B) : Prop :=
+  exists map, isomorphism G H map.
+
+Theorem self_isomorphic : forall A (G : Group A), isomorphic G G.
+Proof.
+  simplify. unfold isomorphic. exists (fun a => a). unfold isomorphism.
+  unfold bijective. intuition.
+  - unfold injective. simplify. trivial.
+  - unfold surjective. simplify. exists b. trivial.
+Qed.
+
+Print Z.add.
+
+Definition product_op {A B} (fa : A -> A -> A) (fb : B -> B -> B) :
+                              (A * B -> A * B -> A * B) :=
+  fun x y => (fa (fst x) (fst y), fb (snd x) (snd y)).
+
+Check Build_Group.
+
+(* This is harder than it first seems... *)
+(*
+Definition product_group {A B} (G : Group A) (H : Group B) : Group (A * B) :=
+  Build_Group (A * B)
+    (product_op G.(@f A) H.(@f B))
+    (G.(@id A), H.(@id B)).
+*)
+
+Print Z.add.
+
+Theorem mod_existence : forall (x y : nat),
+  x > 0 -> exists a b, y = x * a + b /\ 0 <= b < x.
+Proof.
+  simplify. exists (y / x), (y mod x). intuition.
+  - unfold Nat.div. unfold Nat.modulo. cases x; simplify; try linear_arithmetic.
+    admit.
+  - apply Nat.mod_upper_bound. intuition.
+Admitted.
+
+Fixpoint pow_helper {A} (G : Group A) (g acc : A) (n : nat) : A :=
+  match n with
+  | 0 => acc
+  | S m => pow_helper G g (f acc g) m
+  end.
+
+Definition pow {A} (G : Group A) (g : A) (n : nat) : A := pow_helper G g id n.
+
+Definition ord_elt {A} (G : Group A) (g : A) (n : nat) : Prop :=
+  n > 0 /\ pow G g n = id /\ forall i, 0 < i < n -> pow G g i <> id.
+
+Theorem pow_acc : forall A (G : Group A) g n acc,
+  pow_helper G g acc n = f acc (pow G g n).
+Proof.
+  intros A G g n. induct n; simplify.
+  { unfold pow. simplify. destruct G as [f id assoc id_l id_r inverses]. simplify.
+    rewrite id_r. trivial. }
+  unfold pow. unfold pow_helper. rewrite IHn. rewrite IHn.
+  destruct G as [f id assoc id_l id_r inverses] eqn:HG. simplify. clear IHn.
+  rewrite <- HG. rewrite (@id_l g). rewrite (@assoc acc g (pow G g n)). trivial.
+Qed.
+
+Theorem pow_sum : forall A (G : Group A) g m n,
+  pow G g (m + n) = f (pow G g m) (pow G g n).
+Proof.
+  simplify.
+  destruct G as [f id assoc id_l id_r inverses] eqn:HG. simplify. rewrite <- HG.
+  induct n; simplify; try equality.
+  { replace (m + 0) with m by linear_arithmetic. assert (pow G g 0 = id0).
+    { unfold pow. simplify. admit. (* ? *) }
+    rewrite H. rewrite (@id_r0 (pow G g m)). trivial. }
+  specialize (IHn f0 id0 assoc0 id_l0 id_r0 inverses0). apply IHn in HG as IH.
+  clear IHn.
+  replace (m + S n) with (S (m + n)) by linear_arithmetic.
+  unfold pow in *. unfold pow_helper in *. rewrite pow_acc. rewrite pow_acc.
+  admit.
+Admitted.
+
+Theorem pow_prod : forall A (G : Group A) g m n,
+  pow G g (m * n) = pow G (pow G g m) n.
+Proof.
+  simplify. induct n; simplify.
+  { replace (m * 0) with 0 by linear_arithmetic. unfold pow. simplify. trivial. }
+  admit.
+Admitted.
+
+Theorem pow_helper_id : forall A (G : Group A) (n : nat), True.
+Proof.
+Admitted.
+
+Theorem pow_id : forall A (G : Group A) n,
+  pow G id n = id.
+Proof.
+  simplify. induct n; simplify.
+  { unfold pow. simplify. trivial. }
+  unfold pow. simplify. rewrite pow_acc. rewrite IHn.
+  destruct G. simplify. clear IHn. rewrite id_l0. rewrite id_l0. trivial.
+Qed.
+
+Theorem ord_div : forall A (G : Group A) g n n',
+  ord_elt G g n -> pow G g n' = id -> n' mod n = 0.
+Proof.
+  simplify. unfold ord_elt in H. intuition. pose proof (mod_existence n n').
+  apply H2 in H1 as H4. invert H4. invert H5. intuition. rewrite H5.
+  assert (x0 = 0).
+  2: { rewrite H2. replace (n * x + 0) with (x * n) by linear_arithmetic.
+  rewrite Nat.mod_mul; linear_arithmetic. }
+  rewrite H5 in H0. rewrite pow_sum in H0. rewrite pow_prod in H0.
+  rewrite H in H0. rewrite pow_id in H0.
+  assert (pow G g x0 = G.(@id A)).
+  { assert (G.(@f A) G.(@id A) (pow G g x0) = pow G g x0).
+    { destruct G as [f id assoc id_l id_r inverses]. simplify. apply id_l. }
+    rewrite <- H0. rewrite H2. trivial. }
+  specialize (H3 x0). assert (x0 = 0 \/ x0 > 0) by linear_arithmetic.
+  destruct H8; trivial. assert (0 < x0 < n) by linear_arithmetic.
+  apply H3 in H9; trivial; equality.
+Qed.
+
+
+
+
+
 
 
 
