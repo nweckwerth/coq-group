@@ -166,82 +166,115 @@ Proof.
   - apply Nat.mod_upper_bound. intuition.
 Admitted.
 
-Fixpoint pow_helper {A} (G : Group A) (g acc : A) (n : nat) : A :=
+Fixpoint pow {A} (f : A -> A -> A) (acc g : A) (n : nat) : A :=
   match n with
   | 0 => acc
-  | S m => pow_helper G g (f acc g) m
+  | S m => pow f (f acc g) g m
   end.
 
-Definition pow {A} (G : Group A) (g : A) (n : nat) : A := pow_helper G g id n.
-
-Definition ord_elt {A} (G : Group A) (g : A) (n : nat) : Prop :=
-  n > 0 /\ pow G g n = id /\ forall i, 0 < i < n -> pow G g i <> id.
+Definition ord_elt {A} (f : A -> A -> A) (id g : A) (n : nat) : Prop :=
+  n > 0 /\ pow f id g n = id /\ forall i, 0 < i < n -> pow f id g i <> id.
 
 Theorem pow_acc : forall A (G : Group A) g n acc,
-  pow_helper G g acc n = f acc (pow G g n).
+  pow f acc g n = f acc (pow f id g n).
 Proof.
-  intros A G g n. induct n; simplify.
-  { unfold pow. simplify. destruct G as [f id assoc id_l id_r inverses]. simplify.
-    rewrite id_r. trivial. }
-  unfold pow. unfold pow_helper. rewrite IHn. rewrite IHn.
-  destruct G as [f id assoc id_l id_r inverses] eqn:HG. simplify. clear IHn.
-  rewrite <- HG. rewrite (@id_l g). rewrite (@assoc acc g (pow G g n)). trivial.
+  intros A G g n. destruct G as [f id assoc id_l id_r inverses]; induct n; simplify.
+  { rewrite id_r. trivial. }
+  rewrite id_l. rewrite IHn.
+  replace (pow f g g n) with (f g (pow f id g n)) by (rewrite <- IHn; trivial).
+  rewrite (@assoc acc g (pow f id g n)). trivial.
+Qed.
+
+Theorem pow_base_commute : forall A (G : Group A) g n,
+  f g (pow f id g n) = f (pow f id g n) g.
+Proof.
+  simplify. destruct G as [f id assoc id_l id_r inverses]; induct n; simplify.
+  { rewrite id_l. rewrite id_r. trivial. }
+  rewrite id_l. pose proof (pow_acc A
+{|f := f; id := id; assoc := assoc; id_l := id_l; id_r := id_r; inverses := inverses|}
+                g n g); simplify.
+  rewrite H. replace (f g (f g (pow f id g n))) with (f g (f (pow f id g n) g)).
+  2: { f_equal. rewrite IHn. trivial. }
+  rewrite assoc. trivial.
 Qed.
 
 Theorem pow_sum : forall A (G : Group A) g m n,
-  pow G g (m + n) = f (pow G g m) (pow G g n).
+  pow f id g (m + n) = f (pow f id g m) (pow f id g n).
 Proof.
-  simplify.
-  destruct G as [f id assoc id_l id_r inverses] eqn:HG. simplify. rewrite <- HG.
+  simplify; destruct G as [f id assoc id_l id_r inverses]; simplify.
   induct n; simplify; try equality.
-  { replace (m + 0) with m by linear_arithmetic. assert (pow G g 0 = id0).
-    { unfold pow. simplify. admit. (* ? *) }
-    rewrite H. rewrite (@id_r0 (pow G g m)). trivial. }
-  specialize (IHn f0 id0 assoc0 id_l0 id_r0 inverses0). apply IHn in HG as IH.
-  clear IHn.
+  { replace (m + 0) with m by linear_arithmetic. rewrite id_r. trivial. }
   replace (m + S n) with (S (m + n)) by linear_arithmetic.
-  unfold pow in *. unfold pow_helper in *. rewrite pow_acc. rewrite pow_acc.
-  admit.
-Admitted.
-
-Theorem pow_prod : forall A (G : Group A) g m n,
-  pow G g (m * n) = pow G (pow G g m) n.
-Proof.
-  simplify. induct n; simplify.
-  { replace (m * 0) with 0 by linear_arithmetic. unfold pow. simplify. trivial. }
-  admit.
-Admitted.
-
-Theorem pow_helper_id : forall A (G : Group A) (n : nat), True.
-Proof.
-Admitted.
-
-Theorem pow_id : forall A (G : Group A) n,
-  pow G id n = id.
-Proof.
-  simplify. induct n; simplify.
-  { unfold pow. simplify. trivial. }
-  unfold pow. simplify. rewrite pow_acc. rewrite IHn.
-  destruct G. simplify. clear IHn. rewrite id_l0. rewrite id_l0. trivial.
+  rewrite id_l. pose proof (pow_acc A
+{|f := f; id := id; assoc := assoc; id_l := id_l; id_r := id_r; inverses := inverses|}
+              g n g); simplify.
+  rewrite id_l. rewrite H. pose proof (pow_acc A
+{|f := f; id := id; assoc := assoc; id_l := id_l; id_r := id_r; inverses := inverses|}
+              g (m + n) g); simplify.
+  rewrite H0. rewrite IHn. rewrite assoc. pose proof (pow_base_commute A
+{|f := f; id := id; assoc := assoc; id_l := id_l; id_r := id_r; inverses := inverses|}
+              g m); simplify.
+  rewrite H1. rewrite assoc. trivial.
 Qed.
 
-Theorem ord_div : forall A (G : Group A) g n n',
-  ord_elt G g n -> pow G g n' = id -> n' mod n = 0.
+Theorem pow_prod : forall A (G : Group A) g m n,
+  pow f id g (m * n) = pow f id (pow f id g m) n.
 Proof.
-  simplify. unfold ord_elt in H. intuition. pose proof (mod_existence n n').
+  simplify. induct n; simplify.
+  { replace (m * 0) with 0 by linear_arithmetic. unfold pow. trivial. }
+  destruct G as [f id assoc id_l id_r inverses]; simplify. rewrite id_l.
+  replace (m * S n) with (m * n + m) by linear_arithmetic. pose proof (pow_sum A
+{|f := f; id := id; assoc := assoc; id_l := id_l; id_r := id_r; inverses := inverses|}
+              g (m * n) m); simplify.
+  rewrite H. rewrite IHn. pose proof (pow_acc A
+{|f := f; id := id; assoc := assoc; id_l := id_l; id_r := id_r; inverses := inverses|}
+              (pow f id g m) n (pow f id g m)); simplify.
+  rewrite H0. pose proof (pow_base_commute A
+{|f := f; id := id; assoc := assoc; id_l := id_l; id_r := id_r; inverses := inverses|}
+              (pow f id g m) n); simplify.
+  rewrite H1. trivial.
+Qed.
+
+Theorem pow_id : forall A (G : Group A) n,
+  pow f id id n = id.
+Proof.
+  simplify. induct n; simplify; trivial.
+  rewrite pow_acc. rewrite IHn.
+  destruct G as [f id assoc id_l id_r inverses]; simplify; clear IHn.
+  rewrite id_l. rewrite id_l. trivial.
+Qed.
+
+Theorem pow_0 : forall A (G : Group A) acc g,
+  pow f acc g 0 = acc.
+Proof. simplify. trivial. Qed.
+
+Theorem pow_1 : forall A (G : Group A) acc g,
+  pow f acc g 1 = f acc g.
+Proof. simplify. trivial. Qed.
+
+Theorem ord_div : forall A (G : Group A) g n n',
+  ord_elt f id g n -> pow f id g n' = id -> n' mod n = 0.
+Proof.
+  simplify. destruct G as [f id assoc id_l id_r inverses]; simplify.
+  unfold ord_elt in H. intuition. pose proof (mod_existence n n').
   apply H2 in H1 as H4. invert H4. invert H5. intuition. rewrite H5.
   assert (x0 = 0).
   2: { rewrite H2. replace (n * x + 0) with (x * n) by linear_arithmetic.
   rewrite Nat.mod_mul; linear_arithmetic. }
-  rewrite H5 in H0. rewrite pow_sum in H0. rewrite pow_prod in H0.
-  rewrite H in H0. rewrite pow_id in H0.
-  assert (pow G g x0 = G.(@id A)).
-  { assert (G.(@f A) G.(@id A) (pow G g x0) = pow G g x0).
-    { destruct G as [f id assoc id_l id_r inverses]. simplify. apply id_l. }
-    rewrite <- H0. rewrite H2. trivial. }
-  specialize (H3 x0). assert (x0 = 0 \/ x0 > 0) by linear_arithmetic.
-  destruct H8; trivial. assert (0 < x0 < n) by linear_arithmetic.
-  apply H3 in H9; trivial; equality.
+  rewrite H5 in H0. pose proof (pow_sum A
+{|f := f; id := id; assoc := assoc; id_l := id_l; id_r := id_r; inverses := inverses|}
+              g (n * x) x0); simplify.
+  rewrite H2 in H0. pose proof (pow_prod A
+{|f := f; id := id; assoc := assoc; id_l := id_l; id_r := id_r; inverses := inverses|}
+              g n x); simplify.
+  rewrite H8 in H0. rewrite H in H0. pose proof (pow_id A
+{|f := f; id := id; assoc := assoc; id_l := id_l; id_r := id_r; inverses := inverses|}
+              x); simplify.
+  rewrite H9 in H0.
+  rewrite id_l in H0. specialize (H3 x0).
+  assert (x0 = 0 \/ x0 > 0) by linear_arithmetic.
+  destruct H10; trivial. assert (0 < x0 < n) by linear_arithmetic.
+  apply H3 in H11; trivial; equality.
 Qed.
 
 
