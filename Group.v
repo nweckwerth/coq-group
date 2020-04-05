@@ -270,6 +270,24 @@ Definition cyclic_group {A} (f : A -> A -> A) (id : A) : Prop :=
 Definition abelian_group {A} (f : A -> A -> A) : Prop :=
   forall a b, f a b = f b a.
 
+(* A random example *)
+Theorem random_abelian : forall A (G : Group A),
+  (forall a, f a a = id) -> abelian_group f.
+Proof.
+  simplify; unfold_group A G. unfold abelian_group; simplify.
+  specialize (H a) as Ha. specialize (H b) as Hb.
+  specialize (H (f a b)) as Hab.
+  pose proof (inverse_product A
+                {| f := f; id := id; assoc := assoc;
+                   id_l := id_l; inv_l := inv_l |}
+              a a b b); simplify; intuition; unfold left_inv in *.
+  rewrite <- H0 in Hab.
+  pose proof (right_cancel A
+                {| f := f; id := id; assoc := assoc;
+                   id_l := id_l; inv_l := inv_l |}
+              (f a b) (f b a) (f a b)); simplify; intuition.
+Qed.
+
 (* We can also define the order of an element in the group. *)
 Definition ord_elt {A} (f : A -> A -> A) (id g : A) (n : nat) : Prop :=
   n > 0 /\ pow f id g n = id /\ forall i, 0 < i < n -> pow f id g i <> id.
