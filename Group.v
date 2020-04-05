@@ -4,18 +4,17 @@ Require Import Frap Datatypes ZArith.
 
 Set Printing Projections.
 
-(* Let's specify the defining characteristics of a group. *)
+(* Let's specify the defining characteristics of a group.
+   We define groups with left id and left inverse, and derive
+   the right id and right inverse rules from these. *)
 Definition assoc_group {A} (f : A -> A -> A) : Prop :=
   forall a b c, f a (f b c) = f (f a b) c.
 
 Definition id_l_group {A} (f : A -> A -> A) (id : A) : Prop :=
   forall a, f id a = a.
 
-Definition id_r_group {A} (f : A -> A -> A) (id : A) : Prop :=
-  forall a, f a id = a.
-
-Definition inverses_group {A} (f : A -> A -> A) (id : A) : Prop :=
-  forall a, exists b, f a b = id.
+Definition inv_l_group {A} (f : A -> A -> A) (id : A) : Prop :=
+  forall a, exists b, f b a = id.
 
 (* With these definitions, we can define a group. *)
 Class Group A : Type := {
@@ -23,12 +22,11 @@ Class Group A : Type := {
   id : A;
   assoc : assoc_group f;
   id_l : id_l_group f id;
-  id_r : id_r_group f id;
-  inverses : inverses_group f id
+  inv_l : inv_l_group f id
 }.
 
 (* an example group *)
-Theorem Z_inverses : forall (a : Z.t), exists (b : Z.t), Z.add a b = Z.zero.
+Theorem Z_inv_l : forall (a : Z.t), exists (b : Z.t), Z.add b a = Z.zero.
 Proof.
   simplify. exists (Z.opp a). unfold Z.zero. unfold Z.add.
   cases a; simplify; trivial; apply Z.pos_sub_diag.
@@ -39,76 +37,115 @@ Instance GroupInt : Group Z.t := {
   id := 0;
   assoc := Z.add_assoc;
   id_l := Z.add_0_l;
-  id_r := Z.add_0_r;
-  inverses := Z_inverses
+  inv_l := Z_inv_l
 }.
+
+(* First, we derive the right inverse and right id rules. *)
+Definition left_inv {A} (f : A -> A -> A) (id a a' : A) : Prop :=
+  f a' a = id.
+
+Definition right_inv {A} (f : A -> A -> A) (id a a' : A) : Prop :=
+  f a a' = id.
+
+Theorem left_inv_right_inv : forall A (G : Group A) a a',
+  left_inv f id a a' -> right_inv f id a a'.
+Proof.
+  simplify. destruct G as [f id assoc id_l inv_l]; simplify.
+  unfold left_inv, right_inv in *.
+  assert (f (f a' a) a' = f id a') by (f_equal; trivial).
+  rewrite <- assoc in H0. rewrite id_l in H0. specialize (inv_l a').
+  inversion inv_l.
+  assert (f x (f a' (f a a')) = f x a') by (f_equal; trivial).
+  rewrite assoc in H2. rewrite H1 in H2. rewrite id_l in H2. trivial.
+Qed.
+
+Theorem inverses : forall A (G : Group A),
+  forall a, exists b, f b a = id /\ f a b = id.
+Proof.
+  simplify. destruct G as [f id assoc id_l inv_l]; simplify.
+  specialize (inv_l a) as inv_l_a. inversion inv_l_a.
+  exists x. intuition.
+  pose proof (left_inv_right_inv A
+                {| f := f; id := id; assoc := assoc;
+                   id_l := id_l; inv_l := inv_l |}
+              a x); simplify; intuition.
+Qed.
+
+Theorem left_id_right_id : forall A (G : Group A),
+  forall a, f a id = a.
+Proof.
+  simplify. destruct G as [f id assoc id_l inv_l]; simplify.
+  specialize (inv_l a) as inv_l_a. inversion inv_l_a.
+  assert (f x (f (f a x) a) = id).
+  { rewrite assoc. rewrite assoc. rewrite H.
+    rewrite <- assoc. rewrite H. apply id_l. }
+  assert (f x (f (f x a) a) = id)
+    by (rewrite H; rewrite id_l; trivial).
+  assert (f (f a x) a = f (f x a) a).
+  { rewrite <- H1 in H0.
+    specialize (inv_l x) as inv_l_x. inversion inv_l_x.
+    assert (f x0 (f x (f (f a x) a)) = f x0 (f x (f (f x a) a)))
+      by (f_equal; trivial).
+    do 2 (rewrite assoc in H3; rewrite H2 in H3; rewrite id_l in H3).
+    trivial. }
+  rewrite H in H2. rewrite id_l in H2.
+  rewrite <- assoc in H2. rewrite H in H2. trivial.
+Qed.
+
+Ltac unfold_group A G :=
+  pose proof (@left_id_right_id A G) as id_r;
+  pose proof (@inverses A G) as inverses;
+  destruct G as [f id assoc id_l inv_l]; simplify;
+    unfold assoc_group in *;
+    unfold id_l_group in *;
+    unfold left_inv in *.
 
 (* Let's start with some basic theorems. *)
 Theorem id_unique : forall A (G : Group A) e,
-  id_l_group f e /\ id_r_group f e -> e = id.
+  id_l_group f e -> e = id.
 Proof.
-  simplify. destruct G as [f id assoc id_l id_r inverses]; simplify; intuition.
-  assert (f id e = e) by (apply id_l).
-  assert (f id e = id) by (specialize (H0 id); intuition).
-  rewrite H in H2. trivial.
-Qed.
-
-Definition is_inverse {A} (f : A -> A -> A) (id a a' : A) : Prop :=
-  f a a' = id (*/\ f a' a = id *) .
-
-(* An inverse is an inverse, on either side.
-   This also shows that the inverse of an inverse is the original. *)
-Theorem left_inv_right_inv : forall A (G : Group A) a a',
-  is_inverse f id a a' -> is_inverse f id a' a.
-Proof.
-  simplify. destruct G as [f id assoc id_l id_r inverses]; simplify.
-  specialize (inverses a') as Ha'. inversion Ha'.
-  assert (f (f a a') x = f id x) by (f_equal; trivial).
-  rewrite <- assoc in H1. rewrite H0 in H1. rewrite id_l in H1. rewrite id_r in H1.
-  rewrite <- H1 in H0. trivial.
+  simplify. unfold_group A G.
+  assert (f e id = id) by (apply H).
+  assert (f e id = e) by (apply id_r).
+  rewrite H1 in H0. trivial.
 Qed.
 
 (* Now we can show that we can cancel, on either side. *)
 Theorem left_cancel : forall A (G : Group A) a b c,
   f c a = f c b -> a = b.
 Proof.
-  simplify. destruct G as [f id assoc id_l id_r inverses]; simplify.
-  specialize (inverses c) as Hc. inversion Hc.
-  pose proof (left_inv_right_inv A
-                {| f := f; id := id; assoc := assoc;
-                   id_l := id_l; id_r := id_r; inverses := inverses |}
-              c x); simplify.
-  unfold is_inverse in *; apply H1 in H0 as H2; clear H1.
+  simplify. unfold_group A G.
+  specialize (inverses c) as Hc. inversion Hc. intuition.
   assert (f x (f c a) = f x (f c b)) by (f_equal; trivial).
-  do 2 (rewrite assoc in H1). rewrite H2 in H1. do 2 (rewrite id_l in H1). trivial.
+  do 2 (rewrite assoc in H0). rewrite H1 in H0.
+  do 2 (rewrite id_l in H0). trivial.
 Qed.
 
-(* The right side is slightly simpler due to our definition of inverse. *)
 Theorem right_cancel : forall A (G : Group A) a b c,
   f a c = f b c -> a = b.
 Proof.
-  simplify. destruct G as [f id assoc id_l id_r inverses]; simplify.
-  specialize (inverses c) as Hc. inversion Hc.
+  simplify. unfold_group A G.
+  specialize (inverses c) as Hc. inversion Hc. intuition.
   assert (f (f a c) x = f (f b c) x) by (f_equal; trivial).
-  do 2 (rewrite <- assoc in H1). rewrite H0 in H1. do 2 (rewrite id_r in H1). trivial.
+  do 2 (rewrite <- assoc in H0). rewrite H2 in H0.
+  do 2 (rewrite id_r in H0). trivial.
 Qed.
 
 (* With cancellation, we can show that an inverse is unique. *)
 Theorem inverse_unique : forall A (G : Group A) a a' a'',
-  is_inverse f id a a' -> is_inverse f id a a'' -> a' = a''.
+  left_inv f id a a' -> left_inv f id a a'' -> a' = a''.
 Proof.
-  simplify. rewrite <- H0 in H. apply left_cancel in H. trivial.
+  simplify. rewrite <- H0 in H. apply right_cancel in H. trivial.
 Qed.
 
 (* Formula for the inverse of a product. *)
 Theorem inverse_product : forall A (G : Group A) a a' b b',
-  is_inverse f id a a' (A := A) -> is_inverse f id b b' ->
-    is_inverse f id (f a b) (f b' a').
+  left_inv f id a a' (A := A) -> left_inv f id b b' ->
+    left_inv f id (f a b) (f b' a').
 Proof.
-  simplify.
-  destruct G as [f id assoc id_l id_r inverses]; unfold is_inverse in *; simplify.
-  rewrite <- assoc. replace (f b (f b' a')) with a'; trivial.
-  rewrite assoc. rewrite H0. rewrite id_l. trivial.
+  simplify. unfold_group A G.
+  rewrite <- assoc. replace (f a' (f a b)) with b; trivial.
+  rewrite assoc. rewrite H. rewrite id_l. trivial.
 Qed.
 
 (* A helper lemma about modulo; this probably already exists somewhere. *)
@@ -145,7 +182,7 @@ Proof. simplify. trivial. Qed.
 Theorem pow_id : forall A (G : Group A) n,
   pow f id id n = id.
 Proof.
-  destruct G as [f id assoc id_l id_r inverses]; induct n; simplify; trivial.
+  simplify; unfold_group A G. induct n; simplify; intuition.
   rewrite id_l; trivial.
 Qed.
 
@@ -155,9 +192,9 @@ Qed.
 Theorem pow_acc : forall A (G : Group A) g n acc,
   pow f acc g n = f acc (pow f id g n).
 Proof.
-  destruct G as [f id assoc id_l id_r inverses]; induct n; simplify.
+  simplify; unfold_group A G. induct n; simplify.
   { rewrite id_r. trivial. }
-  rewrite id_l. rewrite IHn.
+  rewrite id_l. rewrite IHn; trivial.
   replace (pow f g g n) with (f g (pow f id g n)) by (rewrite <- IHn; trivial).
   rewrite (@assoc acc g (pow f id g n)). trivial.
 Qed.
@@ -166,14 +203,14 @@ Qed.
 Theorem pow_base_commute : forall A (G : Group A) g n,
   f g (pow f id g n) = f (pow f id g n) g.
 Proof.
-  destruct G as [f id assoc id_l id_r inverses]; induct n; simplify; rewrite id_l.
+  simplify; unfold_group A G. induct n; simplify; rewrite id_l.
   { rewrite id_r; trivial. }
   pose proof (pow_acc A
                 {| f := f; id := id; assoc := assoc;
-                   id_l := id_l; id_r := id_r; inverses := inverses |}
+                   id_l := id_l; inv_l := inv_l |}
               g n g); simplify; rewrite H.
   replace (f g (f g (pow f id g n))) with (f g (f (pow f id g n) g)).
-  2: { f_equal. rewrite IHn. trivial. }
+  2: { f_equal. rewrite IHn; trivial. }
   rewrite assoc. trivial.
 Qed.
 
@@ -183,21 +220,21 @@ Theorem pow_sum : forall A (G : Group A) g m n,
 Proof.
   (* We could move the pose proofs here and look slick,
      but I want to make sure I remember the formatting. Plus, it looks fine. *)
-  destruct G as [f id assoc id_l id_r inverses]; induct n; simplify.
+  simplify; unfold_group A G. induct n; simplify.
   { replace (m + 0) with m by linear_arithmetic. rewrite id_r. trivial. }
   replace (m + S n) with (S (m + n)) by linear_arithmetic. rewrite id_l.
   pose proof (pow_acc A
                 {| f := f; id := id; assoc := assoc;
-                   id_l := id_l; id_r := id_r; inverses := inverses |}
+                   id_l := id_l; inv_l := inv_l |}
               g n g); simplify; rewrite id_l; rewrite H; clear H.
   pose proof (pow_acc A
                 {| f := f; id := id; assoc := assoc;
-                   id_l := id_l; id_r := id_r; inverses := inverses |}
+                   id_l := id_l; inv_l := inv_l |}
               g (m + n) g); simplify; rewrite H; clear H.
-  rewrite IHn. rewrite assoc.
+  rewrite IHn; trivial. rewrite assoc.
   pose proof (pow_base_commute A
                 {| f := f; id := id; assoc := assoc;
-                   id_l := id_l; id_r := id_r; inverses := inverses |}
+                   id_l := id_l; inv_l := inv_l |}
               g m); simplify; rewrite H; clear H.
   rewrite assoc. trivial.
 Qed.
@@ -206,21 +243,21 @@ Qed.
 Theorem pow_prod : forall A (G : Group A) g m n,
   pow f id g (m * n) = pow f id (pow f id g m) n.
 Proof.
-  destruct G as [f id assoc id_l id_r inverses]; induct n; simplify.
+  simplify; unfold_group A G. induct n; simplify.
   { replace (m * 0) with 0 by linear_arithmetic. unfold pow. trivial. }
   rewrite id_l. replace (m * S n) with (m * n + m) by linear_arithmetic.
   pose proof (pow_sum A
                 {| f := f; id := id; assoc := assoc;
-                   id_l := id_l; id_r := id_r; inverses := inverses |}
+                   id_l := id_l; inv_l := inv_l |}
               g (m * n) m); simplify; rewrite H; clear H.
-  rewrite IHn.
+  rewrite IHn; trivial.
   pose proof (pow_acc A
                 {| f := f; id := id; assoc := assoc;
-                   id_l := id_l; id_r := id_r; inverses := inverses |}
+                   id_l := id_l; inv_l := inv_l |}
               (pow f id g m) n (pow f id g m)); simplify; rewrite H; clear H.
   pose proof (pow_base_commute A
                 {| f := f; id := id; assoc := assoc;
-                   id_l := id_l; id_r := id_r; inverses := inverses |}
+                   id_l := id_l; inv_l := inv_l |}
               (pow f id g m) n); simplify; rewrite H; clear H.
   trivial.
 Qed.
@@ -241,7 +278,7 @@ Definition ord_elt {A} (f : A -> A -> A) (id g : A) (n : nat) : Prop :=
 Theorem ord_div : forall A (G : Group A) g n n',
   ord_elt f id g n -> pow f id g n' = id -> n' mod n = 0.
 Proof.
-  destruct G as [f id assoc id_l id_r inverses]; simplify.
+  simplify; unfold_group A G.
   unfold ord_elt in H. intuition. pose proof (mod_existence n n').
   apply H2 in H1 as H4; clear H2. invert H4. invert H2. intuition. rewrite H2.
   assert (x0 = 0).
@@ -250,16 +287,16 @@ Proof.
   rewrite H2 in H0; clear H2.
   pose proof (pow_sum A
                 {| f := f; id := id; assoc := assoc;
-                   id_l := id_l; id_r := id_r; inverses := inverses |}
+                   id_l := id_l; inv_l := inv_l |}
               g (n * x) x0); simplify; rewrite H2 in H0; clear H2.
   pose proof (pow_prod A
                 {| f := f; id := id; assoc := assoc;
-                   id_l := id_l; id_r := id_r; inverses := inverses |}
+                   id_l := id_l; inv_l := inv_l |}
               g n x); simplify; rewrite H2 in H0; clear H2.
   rewrite H in H0.
   pose proof (pow_id A
                 {| f := f; id := id; assoc := assoc;
-                   id_l := id_l; id_r := id_r; inverses := inverses |}
+                   id_l := id_l; inv_l := inv_l |}
               x); simplify; rewrite H2 in H0; clear H2.
   rewrite id_l in H0. specialize (H3 x0).
   assert (x0 = 0 \/ x0 > 0) by linear_arithmetic.
@@ -285,20 +322,15 @@ Definition bijective {A B} (map : A -> B) : Prop :=
 Theorem left_mul_bijective : forall A (G : Group A) g,
   bijective (fun a => f g a).
 Proof.
-  simplify. destruct G as [f id assoc id_l id_r inverses]. unfold bijective.
-  simplify. intuition.
+  simplify; unfold_group A G. unfold bijective. intuition.
   - unfold injective. simplify. intuition. apply H.
-    specialize (inverses g) as Hg. inversion Hg. assert (f x g = id).
-    { specialize (inverses x) as Hx. inversion Hx.
-      assert (f g (f x x0) = g) by (rewrite H2; apply id_r).
-      rewrite assoc in H3. rewrite H1 in H3. rewrite id_l in H3.
-      rewrite <- H3. trivial. }
+    specialize (inverses g) as Hg. inversion Hg. intuition.
     assert (f (f x g) a1 = f (f x g) a2).
     { do 2 (rewrite <- assoc). rewrite H0. trivial. }
-    rewrite H2 in H3. do 2 (rewrite id_l in H3). trivial.
+    rewrite H2 in H1. do 2 (rewrite id_l in H1). trivial.
   - unfold surjective. simplify.
-    specialize (inverses g) as Hg. inversion Hg.
-    exists (f x b). rewrite assoc. rewrite H. apply id_l.
+    specialize (inverses g) as Hg. inversion Hg. intuition.
+    exists (f x b). rewrite assoc. rewrite H1. apply id_l.
 Qed.
 
 Definition isomorphism {A B} (G : Group A) (H : Group B) (map : A -> B) : Prop :=
