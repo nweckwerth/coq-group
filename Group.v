@@ -40,6 +40,48 @@ Instance GroupInt : Group Z.t := {
   inv_l := Z_inv_l
 }.
 
+(* Here's another example, showcasing a way to (theoretically)
+   define any finite group: *)
+Inductive set3 :=
+  | zero
+  | one
+  | two.
+
+Definition Z3_f a b :=
+  match (a, b) with
+  | (zero, _) => b
+  | (_, zero) => a
+  | (one, one) => two
+  | (one, two) => zero
+  | (two, one) => zero
+  | (two, two) => one
+  end.
+
+Theorem Z3_assoc : forall a b c, Z3_f a (Z3_f b c) = Z3_f (Z3_f a b) c.
+Proof.
+  simplify. cases a; cases b; cases c; trivial.
+Qed.
+
+Theorem Z3_id_l : forall a, Z3_f zero a = a.
+Proof.
+  simplify; cases a; trivial.
+Qed.
+
+Theorem Z3_inv_l : forall a, exists b, Z3_f b a = zero.
+  simplify; cases a.
+  - exists zero; trivial.
+  - exists two; trivial.
+  - exists one; trivial.
+Qed.
+
+Instance Group3 : Group set3 := {
+  f := Z3_f;
+  id := zero;
+  assoc := Z3_assoc;
+  id_l := Z3_id_l;
+  inv_l := Z3_inv_l
+}.
+
 (* First, we derive the right inverse and right id rules. *)
 Definition left_inv {A} (f : A -> A -> A) (id a a' : A) : Prop :=
   f a' a = id.
